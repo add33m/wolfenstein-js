@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>wolfenstein-js raycaster</title>
+</head>
+<body>
+  <script src="https://koda.nu/simple.js">
+  
+    let map = [
+      [1,1,1,1,1,1,1],
+      [1,0,0,0,0,0,1],
+      [1,0,0,0,0,0,1],
+      [1,0,0,0,0,0,1],
+      [1,0,0,0,0,0,1],
+      [1,0,0,0,0,0,1],
+      [1,1,1,1,1,1,1],    
+    ];
+    
+    updatesPerSecond = 10;
+    
+    class Vector2 {
+      constructor(a,b) {
+        if (typeof b !== 'undefined') {
+          // If b is defined, input is x and y
+          this.x = a;
+          this.y = b;
+        } else {
+          // Else, use trigonometry to find x and y from an angle
+          this.x = cos(a);
+          this.y = sin(a);
+        }
+      }  
+      
+      magnitude() {
+        return sqrt(this.x**2 + this.y**2)
+      }
+      
+      multiply(n) {
+        this.x *= n;
+        this.y *= n;
+        return [this.x, this.y];
+      }
+    }
+    
+    function rad(a) {
+      return a * (pi / 180);
+    }
+    
+    // Find quadrant of an angle in degrees
+    function quadOf(a) {
+      return (floor(abs(360-a%360)/90))%4;
+    }
+    
+    // Map drawing position
+    let offsetStartX = 150;
+    let offsetStartY = 150;
+    
+    class Player {
+      constructor(x,y,rot) {
+        this.x = x;
+        this.y = y;
+        this.rot = rot;
+      }
+      
+      traceRay(ang) {
+        // Get necessary values for ray tracing
+        let foundWall = 0;
+        let closestPointDist = 0;
+        let x, y;
+        let ox = this.x % 1;
+        let oy = this.y % 1;
+        let quadrant = quadOf(ang);
+        
+        let xStep, yStep;
+        let xIntersect, yIntersect;
+        let xIter = 0; // Amount of iterations among X intersections
+        let yIter = 0; // Amounf of iterations among Y intersections
+        
+        if (quadrant === 0) {
+          xIntersect = this.x - oy / tan(rad(ang)); // X pos of first X intersection
+          yIntersect = this.y + (1-ox) * tan(rad(ang)); // Y pos of first Y intersection
+          xStep = -1/tan(rad(ang)); // Step in X between X intersections
+          yStep = tan(rad(ang)); // Step in Y between Y intersections
+          x = ceil(this.x); // X position of first Y intersect
+          y = floor(this.y); // Y position of first X intersect
+          
+          while (foundWall === 0) {
+            // Find distance to next intersection for both axis
+            let distToNextXIntersect = ((xIntersect + xIter*xStep)-this.x) / cos(rad(ang));
+            let distToNextYIntersect = ((yIntersect + yIter*yStep)-this.y) / sin(rad(ang));
+            
+            if (distToNextXIntersect < distToNextYIntersect) {
+              // X intersection is closest, look for a wall
+              if (map[y-1][floor(xIntersect + xIter*xStep)]) {
+                // Wall on current X intersection point, draw rectangle at intersected square
+                foundWall = map[y-1][floor(xIntersect + xIter*xStep)];
+                closestPointDist = distToNextXIntersect;
+                rectangle(offsetStartX + floor(xIntersect + xIter*xStep)*20, offsetStartY + (y-1)*20,20,20,"orange");
+                circle((xIntersect + xIter*xStep)*20 + offsetStartX,y*20 + offsetStartY,4,"green");
+              } else {
+                // No wall found, iterate
+                circle((xIntersect + xIter*xStep)*20 + offsetStartX,y*20 + offsetStartY,4,"red");
+                xIter++;
+                y--;
+              }
+            } else {
+              // Y intersection is closest, look for a wall
+              if (map[floor(yIntersect + yIter*yStep)][x]) {
+                // Wall on current Y intersection point, draw rectangle at intersected square
+                foundWall = map[floor(yIntersect + yIter*yStep)][x];
+                closestPointDist = distToNextYIntersect;
+                rectangle(offsetStartX + x*20, offsetStartY + floor(yIntersect + yIter*yStep)*20,20,20,"yellow");
+                circle(x*20 + offsetStartX, (yIntersect + yIter*yStep)*20 + offsetStartY,4,"green");
+              } else {
+                // No wall found, iterate
+                circle(x*20 + offsetStartX, (yIntersect + yIter*yStep)*20 + offsetStartY,4,"red");
+                yIter++;
+                x++;
+              }
+            }
+          }
+          
+        } else if (quadrant === 1) {
+          xIntersect = this.x - oy / tan(rad(ang)); // X pos of first X intersection
+          yIntersect = this.y - ox * tan(rad(ang)); // Y pos of first Y intersection
+          xStep = -1/tan(rad(ang)); // Step in X between X intersections
+          yStep = -tan(rad(ang)); // Step in Y between Y intersections
+          x = floor(this.x); // X position of first Y intersect
+          y = floor(this.y); // Y position of first X intersect
+          
+          while (foundWall === 0) {
+            // Find distance to next intersection for both axis
+            let distToNextXIntersect = ((xIntersect + xIter*xStep)-this.x) / cos(rad(ang));
+            let distToNextYIntersect = ((yIntersect + yIter*yStep)-this.y) / sin(rad(ang));
+            
+            if (distToNextXIntersect < distToNextYIntersect) {
+              // X intersection is closest, look for a wall
+              if (map[y-1][floor(xIntersect + xIter*xStep)]) {
+                // Wall on current X intersection point, draw rectangle at intersected square
+                foundWall = map[y-1][floor(xIntersect + xIter*xStep)];
+                closestPointDist = distToNextXIntersect;
+                rectangle(offsetStartX + floor(xIntersect + xIter*xStep)*20, offsetStartY + (y-1)*20,20,20,"orange");
+                circle((xIntersect + xIter*xStep)*20 + offsetStartX,y*20 + offsetStartY,4,"green");
+              } else {
+                // No wall found, iterate
+                circle((xIntersect + xIter*xStep)*20 + offsetStartX,y*20 + offsetStartY,4,"red");
+                xIter++;
+                y--;
+              }
+            } else {
+              // Y intersection is closest, look for a wall
+              if (map[floor(yIntersect + yIter*yStep)][x-1]) {
+                // Wall on current Y intersection point, draw rectangle at intersected square
+                foundWall = map[floor(yIntersect + yIter*yStep)][x-1];
+                closestPointDist = distToNextYIntersect;
+                rectangle(offsetStartX + (x-1)*20, offsetStartY + floor(yIntersect + yIter*yStep)*20,20,20,"yellow");
+                circle(x*20 + offsetStartX, (yIntersect + yIter*yStep)*20 + offsetStartY,4,"green");
+              } else {
+                // No wall found, iterate
+                circle(x*20 + offsetStartX, (yIntersect + yIter*yStep)*20 + offsetStartY,4,"red");
+                yIter++;
+                x--;
+              }
+            }
+          }
+          
+        } else if (quadrant === 2) {
+          xIntersect = this.x + (1-oy) / tan(rad(ang)); // X pos of first X intersection
+          yIntersect = this.y - ox * tan(rad(ang)); // Y pos of first Y intersection
+          xStep = 1/tan(rad(ang)); // Step in X between X intersections
+          yStep = -tan(rad(ang)); // Step in Y between Y intersections
+          x = floor(this.x); // X position of first Y intersect
+          y = ceil(this.y); // Y position of first X intersect
+          
+          while (foundWall === 0) {
+            // Find distance to next intersection for both axis
+            let distToNextXIntersect = ((xIntersect + xIter*xStep)-this.x) / cos(rad(ang));
+            let distToNextYIntersect = ((yIntersect + yIter*yStep)-this.y) / sin(rad(ang));
+            
+            if (distToNextXIntersect < distToNextYIntersect) {
+              // X intersection is closest, look for a wall
+              if (map[y][floor(xIntersect + xIter*xStep)]) {
+                // Wall on current X intersection point, draw rectangle at intersected square
+                foundWall = map[y][floor(xIntersect + xIter*xStep)];
+                closestPointDist = distToNextXIntersect;
+                rectangle(offsetStartX + floor(xIntersect + xIter*xStep)*20, offsetStartY + y*20,20,20,"orange");
+                circle((xIntersect + xIter*xStep)*20 + offsetStartX,y*20 + offsetStartY,4,"green");
+              } else {
+                // No wall found, iterate
+                circle((xIntersect + xIter*xStep)*20 + offsetStartX,y*20 + offsetStartY,4,"red");
+                xIter++;
+                y++;
+              }
+            } else {
+              // Y intersection is closest, look for a wall
+              if (map[floor(yIntersect + yIter*yStep)][x-1]) {
+                // Wall on current Y intersection point, draw rectangle at intersected square
+                foundWall = map[floor(yIntersect + yIter*yStep)][x-1];
+                closestPointDist = distToNextYIntersect;
+                rectangle(offsetStartX + (x-1)*20, offsetStartY + floor(yIntersect + yIter*yStep)*20,20,20,"yellow");
+                circle(x*20 + offsetStartX, (yIntersect + yIter*yStep)*20 + offsetStartY,4,"green");
+              } else {
+                // No wall found, iterate
+                circle(x*20 + offsetStartX, (yIntersect + yIter*yStep)*20 + offsetStartY,4,"red");
+                yIter++;
+                x--;
+              }
+            }
+          }
+          
+        } else if (quadrant === 3) {        
+          xIntersect = this.x + (1-oy) / tan(rad(ang)); // X pos of first X intersection
+          yIntersect = this.y + (1-ox) * tan(rad(ang)); // Y pos of first Y intersection
+          xStep = 1/tan(rad(ang)); // Step in X between X intersections
+          yStep = tan(rad(ang)); // Step in Y between Y intersections
+          x = ceil(this.x); // X position of first Y intersect
+          y = ceil(this.y); // Y position of first X intersect
+          
+          while (foundWall === 0) {
+            // Find distance to next intersection for both axis
+            let distToNextXIntersect = ((xIntersect + xIter*xStep)-this.x) / cos(rad(ang));
+            let distToNextYIntersect = ((yIntersect + yIter*yStep)-this.y) / sin(rad(ang));
+            
+            if (distToNextXIntersect < distToNextYIntersect) {
+              // X intersection is closest, look for a wall
+              if (map[y][floor(xIntersect + xIter*xStep)]) {
+                // Wall on current X intersection point, draw rectangle at intersected square
+                foundWall = map[y][floor(xIntersect + xIter*xStep)];
+                closestPointDist = distToNextXIntersect;
+                rectangle(offsetStartX + floor(xIntersect + xIter*xStep)*20, offsetStartY + y*20,20,20,"orange");
+                circle((xIntersect + xIter*xStep)*20 + offsetStartX,y*20 + offsetStartY,4,"green");
+              } else {
+                // No wall found, iterate
+                circle((xIntersect + xIter*xStep)*20 + offsetStartX,y*20 + offsetStartY,4,"red");
+                xIter++;
+                y++;
+              }
+            } else {
+              // Y intersection is closest, look for a wall
+              if (map[floor(yIntersect + yIter*yStep)][x]) {
+                // Wall on current Y intersection point, draw rectangle at intersected square
+                foundWall = map[floor(yIntersect + yIter*yStep)][x];
+                closestPointDist = distToNextYIntersect;
+                rectangle(offsetStartX + x*20, offsetStartY + floor(yIntersect + yIter*yStep)*20,20,20,"yellow");
+                circle(x*20 + offsetStartX, (yIntersect + yIter*yStep)*20 + offsetStartY,4,"green");
+              } else {
+                // No wall found, iterate
+                circle(x*20 + offsetStartX, (yIntersect + yIter*yStep)*20 + offsetStartY,4,"red");
+                yIter++;
+                x++;
+              }
+            }
+          }
+          
+        }
+        
+        /*
+          For first quadrant:
+          let xIntersect = this.x - oy / tan(rad(ang));
+          let yIntersect = this.y + (1-ox) * tan(rad(ang));
+          let xStep = -1/tan(rad(ang));
+          let yStep = tan(rad(ang));
+          
+          For second quadrant:
+          let xIntersect = this.x - oy / tan(rad(ang));
+          let yIntersect = this.y - ox * tan(rad(ang));
+          let xStep = -1/tan(rad(ang));
+          let yStep = -tan(rad(ang));
+          
+          For third quadrant:
+          let xIntersect = this.x + (1-oy) / tan(rad(ang));
+          let yIntersect = this.y - ox * tan(rad(ang));
+          let xStep = 1/tan(rad(ang));
+          let yStep = -tan(rad(ang));
+          
+          For fourth quadrant:
+          let xIntersect = this.x + (1-oy) / tan(rad(ang));
+          let yIntersect = this.y + (1-ox) * tan(rad(ang));
+          let xStep = 1/tan(rad(ang));
+          let yStep = tan(rad(ang));
+        */      
+        return {closestPoint: closestPointDist, wallType: foundWall}
+      }
+      
+      draw() {
+        circle(this.x * 20 + offsetStartX,this.y * 20 + offsetStartY,5,"red");
+      }
+    }
+    
+    function draw2dMap() {
+      for (let a=0; a<map.length; a++) {
+        line(offsetStartX, offsetStartY + 20 * a, offsetStartX + 20 * map[a].length, offsetStartY + 20 * a);
+        for (let b=0; b<map[a].length; b++) {
+          line(offsetStartX + 20 * b, offsetStartY, offsetStartX + 20 * b, offsetStartY + 20 * a);
+          if (map[a][b]) {
+            rectangle(offsetStartX + 20 * a, offsetStartY + 20 * b, 20, 20, "blue");
+          }
+        }
+      }
+    }
+    
+    let player = new Player(3.2,3.2,0);
+    let angle = -89;
+    updatesPerSecond = 120;
+    
+    function update() {
+      clearScreen();
+      
+      if (keyboard.right) {angle += 2}
+      if (keyboard.left) {angle -= 2}
+      
+      if (keyboard.w) {player.y -= .1}
+      if (keyboard.s) {player.y += .1}
+      if (keyboard.a) {player.x -= .1}
+      if (keyboard.d) {player.x += .1}
+  
+      
+      draw2dMap();
+      player.draw();
+      let k,l,x,y = player.traceRay(angle);
+      line(player.x * 20 + offsetStartX,player.y * 20 + offsetStartY, offsetStartX + player.x * 20 + 500 * cos(rad(angle)), offsetStartY + player.y * 20 + 500 * sin(rad(angle)));
+      //line(player.x* 20 + offsetStartX,player.y* 20 + offsetStartX,k* 20 + offsetStartX,l* 20 + offsetStartX,"purple");
+    }
+  
+  </script>
+</body>
+</html>

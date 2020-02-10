@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>wolfenstein-js by add33m</title>
+</head>
+<body>
+  <script src="https://koda.nu/simple.js">
+  
+    // Get canvas
+    let ctx = document.getElementById("canvas").getContext("2d");
+    ctx.imageSmoothingEnabled = false;
+    
+    let realUpdatesPerSecond = 0;
+    let fps = 0;
+    
+    // Degrees to radians
+    function rad(a) {
+      return a * (pi / 180);
+    }
+    
+    // Radians to degrees
+    function deg(a) {
+      return a * (180 / pi);
+    }
+      
+    // Find quadrant of an angle in degrees
+    function quadOf(a) {
+      return (floor(abs(360-a%360)/90))%4;
+    }
+    
+    let map = [
+      [1,1,3,1,3,1,1],
+      [1,0,0,0,0,0,1],
+      [3,0,0,2,0,0,3],
+      [1,0,2,2,2,0,1],
+      [3,0,0,2,0,0,3],
+      [1,0,0,0,0,0,1],
+      [1,1,3,1,3,1,1],    
+    ];
+    
+    let wallTexture = new Image();
+    wallTexture.src = "http://www.areyep.com/Texturelibrary/walltextures/WoodbrickL.gif";
+    let wallFlag = new Image();
+    wallFlag.src = "http://www.areyep.com/Texturelibrary/walltextures/WoodbrickeagleL.gif";
+    let brickTexture = new Image();
+    brickTexture.src = "http://www.areyep.com/Texturelibrary/walltextures/BluegreyL.gif";
+    
+    let styles = [
+      wallTexture,
+      brickTexture,
+      wallFlag,
+    ];
+    
+    let entities = [];
+    
+    //Draw darkening transparent rectangle
+    function darkerRect(x,y,a,b,n) {
+      ctx.beginPath();
+      ctx.rect(x,y,a,b);
+      ctx.closePath();
+      ctx.fillStyle = "rgba(0,0,0,"+n+")";
+      ctx.fill();
+    }
+    
+    class Entity {
+      constructor(x,y,width,isRotationAnchored=false,ang=0) {
+        this.x = x;
+        this.y = y;
+        this.width = width;
+        this.isRotationAnchored = isRotationAnchored;
+        this.ang = ang;
+      }
+    }
+    
+    class Player {
+      constructor(x,y,ang=0) {
+        this.x = x;
+        this.y = y;
+        this.xv = 0;
+        this.yv = 0;
+        this.rot = ang;
+        
+        this.projDist = 170; // Increase fov by lowering the distance of the projection screen
+      }
+      
+      traceRayGrid(ang) {
+        // Get necessary values for ray tracing
+        let foundWall = 0;
+        let closestPointDist = 0;
+        let pointOnWall; // Find where along the wall ray hit to draw textures
+        let quadrant = quadOf(ang);
+        
+        let ox = this.x % 1;
+        let oy = this.y % 1;
+        let xIter = 0; // Amount of iterations among X intersections
+        let yIter = 0; // Amounf of iterations among Y intersections
+        let xDir, yDir; // Defines if x and y is positive or negative (= 1 or -1) in the current quadrant
+        
+        // Setup xDir/yDir depending on quadrant
+        if (quadrant === 0) {
+          xDir =  1;
+          yDir = -1;
+        } else if (quadrant === 1) {
+          xDir = -1;
+          yDir = -1;
+        } else if (quadrant === 2) {
+          xDir = -1;
+          yDir =  1;
+        } else if (quadrant === 3) {
+          xDir =  1;
+          yDir =  1;
+        }
+        
+        // Setup rest of variables
+        let xIntersect = this.x + ((.5+.5*yDir)-oy) / tan(rad(ang)); // X pos of first X intersection
+        let yIntersect = this.y + ((.5+.5*xDir)-ox) * tan(rad(ang)); // Y pos of first Y intersection
+        let xStep = 1/tan(rad(ang)) * yDir; // Step in X between X intersections
+        let yStep = tan(rad(ang)) * xDir; // Step in Y between Y intersections
+        let x = floor(this.x) + .5+.5*xDir; // X pos of first Y intersection
+        let y = floor(this.y) + .5+.5*yDir; // Y pos of first X intersection
+        
+        let distToNextXIntersect, distToNextYIntersect;
+        
+        // Perform ray trace  
+        while (foundWall === 0) {
+          // Find distance to next intersection for both axis
+          distToNextXIntersect = sqrt((xIntersect + xIter*xStep - this.x)**2 + (y - this.y)**2);
+          distToNextYIntersect = sqrt((yIntersect + yIter*yStep - this.y)**2 + (x - this.x)**2);
+  
+          if (distToNextXIntersect < distToNextYIntersect) {
+            // X intersection is closest, look for a wall
+            if (map[y - .5+.5*yDir][floor(xIntersect + xIter*xStep)]) {
+              // Wall on current X intersection point, draw rectangle at intersected square
+              foundWall = map[y - .5+.5*yDir][floor(xIntersect + xIter*xStep)];
+              pointOnWall = .5 + .5*yDir - (xIntersect + xIter*xStep) % 1 * yDir; // Flip the image based on quadrant to always get the right image
+              closestPointDist = distToNextXIntersect;
+            } else {
+              // No wall found, iterate
+              xIter++;
+              y += yDir;
+            }
+            
+          } else {
+            // Y intersection is closest, look for a wall
+            if (map[floor(yIntersect + yIter*yStep)][x - .5+.5*xDir]) {
+              // Wall on current Y intersection point, draw rectangle at intersected square
+              foundWall = map[floor(yIntersect + yIter*yStep)][x - .5+.5*xDir];
+              pointOnWall = .5 - .5*xDir + (yIntersect + yIter*yStep) % 1 * xDir;
+              closestPointDist = distToNextYIntersect;
+            } else {
+              // No wall found, iterate
+              yIter++;
+              x += xDir;
+            }
+          }
+        }
+           
+        return {closestPoint: closestPointDist, wallType: foundWall-1, pointOnWall: pointOnWall};
+      }
+      
+      traceRayLine(x1,y1,x2,y2,x3,y3,x4,y4) { // 1,2 is entity; 3,4 is ray
+        let d = (x1-x2)*(y3-y4)-(y1-y2)*(x3-x4); // Denominator
+        
+        if (d != 0) { // Lines are not parallell
+          let t = (x1-x3)*(y3-y4)-(y1-y3)*(x3-x4) / d;
+          let u = -(x1-x2)*(y1-y3)-(y1-y2)*(x1-x3) / d;
+          
+          console.log("not parallel" + " t: "+t+" u: "+u);
+          
+          // If rays intersect find dist and point on line
+          if (t>0 && t<1 && u>0) {
+            console.log("intersects");
+            let xIntersect = x1 + t*(x2-x1);
+            let yIntersect = y1 + t*(y2-y1);
+            let dist = sqrt((xIntersect-this.x)**2 + (yIntersect-this.y)**2);
+            let pointOnLine;
+            
+            // Use X delta to find point on line if not 0, else use Y
+            let xd = x1 - x2;
+            if (xd != 0) {
+              pointOnLine = (xIntersect - x1) / xd;
+            } else {
+              let yd = y1 - y2;
+              pointOnLine = (yIntersect - y1) / yd
+            }
+            return {dist: dist, pointOnLine: pointOnLine};
+          } else {
+            return false;
+          }
+        } else {
+          return false;
+        } 
+      }
+      
+      draw2d() {
+        let gridSize = 20;
+        let xOffset = 100;
+        let yOffset = 100;
+        
+        for (let y=0; y<map.length; y++) {
+          for (let x=0; x<map[y].length; x++) {
+            if (map[y][x] != 0) {
+              let type = map[y][x];
+              let style = styles[type-1];
+              
+              if (style.constructor === Array) {
+                // If color
+                rectangle(xOffset + x*gridSize,yOffset + y*gridSize,gridSize,gridSize,mixColor(style[0],style[1],style[2]));
+              } else if (typeof style == "object") {
+                // If texture
+                ctx.drawImage(style, xOffset + x*gridSize,yOffset + y*gridSize,gridSize,gridSize);
+              }
+            }
+          }
+      }
+        
+        // Draw player last
+        circle(xOffset + (this.x * gridSize),yOffset + (this.y * gridSize),6,"orange");
+        line(xOffset + (this.x * gridSize),yOffset + (this.y * gridSize),xOffset + (this.x * gridSize) + 16 * cos(rad(this.rot)),yOffset + (this.y * gridSize) + 16 * sin(rad(this.rot)),2,"orange");
+      }
+      
+      draw3d() {
+        let trace, dist, wallSize, trueAng;
+        let distLen = 10; // How far the player can see colors/textures
+        let distK = 1000; // Constant that changes how "large" everything looks (larger constant -> taller walls)
+        let vpWidth = totalWidth;
+        let vpHeight = totalHeight;
+        let columns = floor(vpWidth/6); // Amount of "pixels" in the x axis
+        let rows = floor(vpHeight/10); // Amount of "pixels" in the y axis
+        let pixelHeight = vpHeight / rows;
+        let fov = deg(Math.atan(vpWidth / this.projDist));
+        let columnWidth = vpWidth/columns;
+        
+        let applyShadingToTextures = false;
+        
+        // First draw "floor" and "ceiling"
+        rectangle(0,vpHeight/2,vpWidth,vpHeight/2,"darkgrey");
+        rectangle(0,0,vpWidth,vpHeight/2,"grey");
+        
+        for (let i=0; i<columns; i+=fov/columns) {
+          trueAng = deg(Math.atan((i-columns/2) / this.projDist)) + this.rot;
+          trace = this.traceRayGrid(trueAng);
+          dist = trace.closestPoint * cos(rad(trueAng-this.rot));
+          wallSize = floor((distK/dist)/pixelHeight)*pixelHeight; // Make wall sizes look "pixelated"
+          
+          // Draw texture or color
+          if (styles[trace.wallType].constructor === Array) {
+            rectangle(i*columnWidth,(vpHeight-wallSize)/2,columnWidth*fov/columns+1,wallSize,mixColor((1-dist/distLen)*styles[trace.wallType][0],(1-dist/distLen)*styles[trace.wallType][1],(1-dist/distLen)*styles[trace.wallType][2]));
+          } else if (typeof styles[trace.wallType] == "object") {
+            let img = styles[trace.wallType];
+            ctx.drawImage(img, floor(trace.pointOnWall * img.naturalWidth), 0, 1, img.naturalHeight, i*columnWidth, (vpHeight-wallSize)/2, columnWidth*fov/columns+1, wallSize);
+            // Draw transparent rectangle on top to darken at distances if setting is on
+            if (applyShadingToTextures) {
+              darkerRect(i*columnWidth,(vpHeight-wallSize)/2,columnWidth*fov/columns,wallSize,dist/distLen);
+            }
+          } else {
+            rectangle(i*columnWidth,(vpHeight-wallSize)/2,columnWidth*fov/columns+1,wallSize,mixColor((1-dist/distLen)*255,(1-dist/distLen)*255,(1-dist/distLen)*255));
+          }
+          
+          // Trace all entities in range and draw the closest one
+          /*
+          let closestEntDist = 2;
+          let closestEnt;
+          for (let ent=0; ent<entities.length; ent++) {
+            let entity = entities[ent];
+            // Only check if closer/close enough
+            if (Math.sqrt((entity.x-this.x)**2+(entity.y-this.y)**2) < closestEntDist) {
+              let xPointDist, yPointDist;
+              if (entity.isRotationAnchored == false) {
+                xPointDist = entity.width * Math.cos(rad(this.rot-0));
+                yPointDist = entity.width * Math.sin(rad(this.rot-0));
+              } else {
+                xPointDist = entity.width * Math.cos(rad(entity.rot-90));
+                yPointDist = entity.width * Math.sin(rad(entity.rot-90));
+              }
+              let entTrace = this.traceRayLine(entity.x+xPointDist,entity.y+yPointDist,entity.x-xPointDist,entity.y-yPointDist,this.x,this.y,Math.cos(rad(trueAng)),Math.sin(rad(trueAng)));
+              closestEntDist = entTrace.dist;
+              closestEnt = entity;
+            }
+          }
+          
+          if (closestEntDist < 2) {
+            let entDrawSize = floor((100/distance(this.x,this.y,closestEnt.x,closestEnt.y))/pixelHeight)*pixelHeight;
+            text(0,20,20,closestEntDist);
+            rectangle(i*columnWidth,(vpHeight-entDrawSize)/2,columnWidth*fov/columns+1,entDrawSize,"grey");
+          }*/
+        }
+      }
+      
+      doInputCalculations() {
+        if (keyboard.right) {this.rot += 50 / realUpdatesPerSecond}
+        if (keyboard.left) {this.rot -= 50 / realUpdatesPerSecond}
+        
+        if (player.rot > 360) {player.rot -= 360}
+        if (player.rot < 0) {player.rot += 360}
+        
+        let xMovement = cos(rad(this.rot)) * .4 / realUpdatesPerSecond;
+        let yMovement = sin(rad(this.rot)) * .4 / realUpdatesPerSecond;
+  
+        if (keyboard.w) {
+          this.xv += xMovement;
+          this.yv += yMovement;
+        }
+        if (keyboard.s) {
+          this.xv -= xMovement;
+          this.yv -= yMovement;
+        }
+        if (keyboard.a) {
+          this.xv += yMovement;
+          this.yv -= xMovement;
+        }
+        if (keyboard.d) {
+          this.xv -= yMovement;
+          this.yv += xMovement;
+        }
+      }
+      
+      doPhysicsCalculations() {
+        // Friction
+        this.xv *= .9;
+        this.yv *= .9;
+        
+        let maxVel = 1.5 / realUpdatesPerSecond;
+        
+        let velVectorAngle = Math.atan(this.yv / this.xv);
+        let maxVelX = abs(maxVel * cos(velVectorAngle));
+        let maxVelY = abs(maxVel * sin(velVectorAngle));
+        
+        // Cap out velocity
+        if (this.xv > maxVelX) {
+          this.xv = maxVelX;
+        } else if (this.xv < -maxVelX) {
+          this.xv = -maxVelX;
+        } 
+        if (this.yv > maxVelY) {
+          this.yv = maxVelY;
+        } else if (this.yv < -maxVelY) {
+          this.yv = -maxVelY;
+        }
+      }
+      
+      doCollisionCalculations() {
+        // Yes I know this is cheap and sucks but I can't be bothered to make a better one rn
+        let xvDir = this.xv/abs(this.xv) || 1;
+        if (map[floor(this.y)][floor(this.x+this.xv+.1*xvDir)] != 0) {
+          this.xv = 0;
+          this.yv *= .8; //Simulate friction while sliding against the wall
+        }
+        let yvDir = this.yv/abs(this.yv) || 1;
+        if (map[floor(this.y+this.yv+.1*yvDir)][floor(this.x)] != 0) {
+          this.yv = 0;
+          this.xv *= .8; //Simulate friction while sliding against the wall
+        }
+      }
+      
+      applyVelocity() {
+        this.x += this.xv;
+        this.y += this.yv;
+      }
+    }
+    
+    let player = new Player(1.5,1.5,0);
+    let testEnt = new Entity(3.5,1.5,.2);
+    entities[0] = testEnt;
+    
+    updatesPerSecond = 90;
+    
+    let lastUpdateTime = performance.now();
+    
+    function update() {
+      clearScreen();
+      
+      player.doInputCalculations();
+      player.doPhysicsCalculations();
+      player.doCollisionCalculations();
+      player.applyVelocity();
+      
+      if (keyboard.up) {
+        player.projDist += 2;
+      } else if (keyboard.down) {
+        player.projDist -= 2;
+        if (player.projDist == 0) {
+          player.projDist = 2;
+        }
+      }
+      
+      player.draw3d();
+      if (keyboard.m) {
+        player.draw2d();
+      }
+      
+      realUpdatesPerSecond = floor(1000/(performance.now()-lastUpdateTime));
+      // Only update fps counter every once in a while to make it more readable
+      let updateFpsCounter = ((floor(performance.now() / 10) % 20) === 0);
+      if (updateFpsCounter) {
+        fps = realUpdatesPerSecond;
+      }
+      text(0,10,10,fps + " fps","black");
+      lastUpdateTime = performance.now();
+    }
+  
+  </script>
+</body>
+</html>
